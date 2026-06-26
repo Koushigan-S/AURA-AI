@@ -236,7 +236,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               type="file"
               ref={fileInputRef}
               onChange={handleFileChange}
-              accept=".pdf,.docx,.txt"
+              accept=".pdf,.docx,.txt,.pptx"
               className="hidden"
             />
             {loading ? (
@@ -251,7 +251,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
                 <h3 className="text-base font-semibold text-white mb-1">Upload Study Material</h3>
                 <p className="text-xs text-apple-gray max-w-xs leading-relaxed mb-1">
-                  Drag and drop your PDF, DOCX, or TXT file here or click to browse.
+                  Drag and drop your PDF, DOCX, TXT, or PPTX file here or click to browse.
                 </p>
                 <p className="text-[10px] text-apple-gray/40">Duplicate file uploads are automatically filtered.</p>
               </>

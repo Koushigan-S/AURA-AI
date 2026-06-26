@@ -1,5 +1,6 @@
 import * as pdfjs from 'pdfjs-dist';
 import mammoth from 'mammoth';
+import JSZip from 'jszip';
 import type { AuraDocument, AuraSection } from '../types';
 
 // Initialize PDF.js worker
@@ -71,6 +72,50 @@ export async function parseTxt(file: File): Promise<{ content: string; pages: st
 }
 
 /**
+ * Extracts raw text from slide XMLs of a PPTX file.
+ */
+export async function parsePptx(file: File): Promise<{ content: string; pages: string[] }> {
+  const arrayBuffer = await file.arrayBuffer();
+  const zip = await new JSZip().loadAsync(arrayBuffer);
+  const parser = new DOMParser();
+  const namespace = "http://schemas.openxmlformats.org/drawingml/2006/main";
+  const pages: string[] = [];
+  let fullText = '';
+
+  let slideIndex = 1;
+  while (true) {
+    const slideFile = zip.file(`ppt/slides/slide${slideIndex}.xml`);
+    if (!slideFile) break;
+
+    const xmlContent = await slideFile.async('text');
+    const xmlDoc = parser.parseFromString(xmlContent, 'application/xml');
+
+    // Find all text nodes (<a:t>)
+    const textNodes = xmlDoc.getElementsByTagNameNS(namespace, "t");
+    let slideText = '';
+    for (let i = 0; i < textNodes.length; i++) {
+      slideText += (textNodes[i].textContent || '') + ' ';
+    }
+
+    const cleanSlideText = slideText.trim().replace(/\s+/g, ' ');
+    if (cleanSlideText) {
+      pages.push(cleanSlideText);
+      fullText += `\n--- Slide ${slideIndex} ---\n` + cleanSlideText;
+    } else {
+      pages.push(`[Slide ${slideIndex} - Empty or Visual Only]`);
+    }
+    slideIndex++;
+  }
+
+  if (pages.length === 0) {
+    throw new Error('No text found in the PowerPoint presentation. It may be empty or contain only image slides.');
+  }
+
+  return { content: fullText.trim(), pages };
+}
+
+
+/**
  * Parses and returns a clean list of document sections.
  * This is an initial client-side split which will be enriched by AI.
  */
@@ -140,8 +185,10 @@ export async function processFile(file: File): Promise<Omit<AuraDocument, 'topic
     parsed = await parseDocx(file);
   } else if (extension === 'txt') {
     parsed = await parseTxt(file);
+  } else if (extension === 'pptx') {
+    parsed = await parsePptx(file);
   } else {
-    throw new Error('Unsupported file format. Please upload PDF, DOCX, or TXT.');
+    throw new Error('Unsupported file format. Please upload PDF, DOCX, TXT, or PPTX.');
   }
 
   const sections = identifyInitialSections(parsed.content);
@@ -150,7 +197,7 @@ export async function processFile(file: File): Promise<Omit<AuraDocument, 'topic
     id: getFileFingerprint(file),
     name: file.name,
     size: file.size,
-    type: extension as 'pdf' | 'docx' | 'txt',
+    type: extension as 'pdf' | 'docx' | 'txt' | 'pptx',
     content: parsed.content,
     pages: parsed.pages,
     sections,
@@ -158,3 +205,4 @@ export async function processFile(file: File): Promise<Omit<AuraDocument, 'topic
     uploadedAt: new Date().toISOString()
   };
 }
+

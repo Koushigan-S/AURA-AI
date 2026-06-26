@@ -2,7 +2,7 @@ export interface AuraDocument {
   id: string;
   name: string;
   size: number;
-  type: 'pdf' | 'docx' | 'txt';
+  type: 'pdf' | 'docx' | 'txt' | 'pptx';
   content: string;
   pages: string[];
   topicContext: string;
