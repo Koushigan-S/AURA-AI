@@ -2,6 +2,7 @@ import React from 'react';
 import type { Settings } from '../types';
 import { Key, Eye, EyeOff, BookOpen, Star, HelpCircle, Layers, Volume2, User, Mail, CheckCircle2, AlertCircle } from 'lucide-react';
 import { authService } from '../services/auth';
+import { validateApiKey } from '../services/gemini';
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -15,6 +16,57 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, setSetti
   const [profileError, setProfileError] = React.useState('');
   const [profileSuccess, setProfileSuccess] = React.useState('');
   const [profileLoading, setProfileLoading] = React.useState(false);
+
+  const [apiKey, setApiKey] = React.useState(settings.geminiApiKey || '');
+  const [apiKeyError, setApiKeyError] = React.useState('');
+  const [apiKeySuccess, setApiKeySuccess] = React.useState('');
+  const [keyTesting, setKeyTesting] = React.useState(false);
+  const [keySaving, setKeySaving] = React.useState(false);
+
+  const handleSaveApiKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setApiKeyError('');
+    setApiKeySuccess('');
+
+    if (!apiKey.trim()) {
+      setApiKeyError('API Key cannot be empty.');
+      return;
+    }
+
+    setKeySaving(true);
+    try {
+      updateSetting('geminiApiKey', apiKey.trim());
+      setApiKeySuccess('Gemini API key saved successfully!');
+    } catch (err) {
+      setApiKeyError('Failed to save API key.');
+    } finally {
+      setKeySaving(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setApiKeyError('');
+    setApiKeySuccess('');
+
+    if (!apiKey.trim()) {
+      setApiKeyError('Please enter an API Key to test.');
+      return;
+    }
+
+    setKeyTesting(true);
+    try {
+      const isValid = await validateApiKey(apiKey.trim());
+      if (isValid) {
+        setApiKeySuccess('Connection successful! Gemini API Key is valid and active.');
+      } else {
+        setApiKeyError('Invalid API Key or network error. Please check your key.');
+      }
+    } catch (err) {
+      setApiKeyError('An error occurred while validating the API key.');
+    } finally {
+      setKeyTesting(false);
+    }
+  };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,32 +177,69 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, setSetti
         </form>
 
         {/* Gemini API Key */}
-        <div>
-          <label className="block text-sm font-medium text-white/90 mb-2 flex items-center gap-2">
-            <Key className="w-4 h-4 text-apple-blue" />
-            Gemini API Key
-          </label>
-          <div className="relative rounded-lg shadow-sm">
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={settings.geminiApiKey}
-              onChange={(e) => updateSetting('geminiApiKey', e.target.value)}
-              placeholder="Paste your Gemini API key (e.g. AIzaSy...)"
-              className="w-full bg-apple-black/40 border border-white/10 rounded-lg py-2.5 pl-3 pr-10 text-white text-sm focus:outline-none focus:ring-1 focus:ring-apple-blue focus:border-apple-blue placeholder:text-apple-gray/50 font-mono"
-            />
+        <div className="space-y-4 pb-6 border-b border-white/10">
+          <h3 className="text-xs font-semibold text-white/95 uppercase tracking-wider">Gemini Integration</h3>
+
+          {apiKeyError && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs px-3.5 py-2.5 rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4.5 h-4.5 text-red-400 shrink-0" />
+              <span>{apiKeyError}</span>
+            </div>
+          )}
+          {apiKeySuccess && (
+            <div className="bg-green-500/10 border border-green-500/20 text-green-300 text-xs px-3.5 py-2.5 rounded-lg flex items-center gap-2">
+              <CheckCircle2 className="w-4.5 h-4.5 text-green-400 shrink-0" />
+              <span>{apiKeySuccess}</span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-white/90 mb-2 flex items-center gap-2">
+              <Key className="w-4 h-4 text-apple-blue" />
+              Gemini API Key
+            </label>
+            <div className="relative rounded-lg shadow-sm">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Paste your Gemini API key (e.g. AIzaSy...)"
+                className="w-full bg-apple-black/45 border border-white/10 rounded-lg py-2.5 pl-3 pr-10 text-white text-sm focus:outline-none focus:ring-1 focus:ring-apple-blue focus:border-apple-blue placeholder:text-apple-gray/40 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-apple-gray hover:text-white"
+              >
+                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-apple-gray mt-2 flex items-center gap-1.5">
+              <HelpCircle className="w-3.5 h-3.5" />
+              No key? AURA runs in <span className="text-purple-400 font-medium">Offline Demo Mode</span> with fully loaded sample documents.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
-              onClick={() => setShowKey(!showKey)}
-              className="absolute inset-y-0 right-0 flex items-center pr-3 text-apple-gray hover:text-white"
+              onClick={handleTestConnection}
+              disabled={keyTesting || keySaving}
+              className="py-2 px-5 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 text-white rounded-lg text-xs font-semibold apple-transition flex items-center gap-2"
             >
-              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {keyTesting ? 'Testing...' : 'Test Connection'}
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveApiKey}
+              disabled={keyTesting || keySaving}
+              className="py-2 px-5 bg-apple-blue hover:bg-apple-blue/90 disabled:bg-apple-blue/50 text-white rounded-lg text-xs font-semibold apple-transition flex items-center gap-2 shadow-sm"
+            >
+              {keySaving ? 'Saving...' : 'Save API Key'}
             </button>
           </div>
-          <p className="text-xs text-apple-gray mt-2 flex items-center gap-1.5">
-            <HelpCircle className="w-3.5 h-3.5" />
-            No key? AURA runs in <span className="text-purple-400 font-medium">Offline Demo Mode</span> with fully loaded sample documents.
-          </p>
         </div>
+
 
         {/* Study Mode */}
         <div>

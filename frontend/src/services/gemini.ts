@@ -530,3 +530,24 @@ Format using clean Markdown.`;
     return `${currentSummary}\n\n### Merged Note\n${newNotes}`;
   }
 }
+
+/**
+ * Verifies if the Gemini API Key is valid by making a lightweight test query.
+ */
+export async function validateApiKey(apiKey: string): Promise<boolean> {
+  if (!apiKey || !apiKey.trim()) return false;
+  try {
+    const genAI = getGeminiClient(apiKey.trim());
+    if (!genAI) return false;
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: 'Ping' }] }],
+      generationConfig: { maxOutputTokens: 5 }
+    });
+    return !!result.response.text();
+  } catch (error) {
+    console.error('Gemini API key validation failed:', error);
+    return false;
+  }
+}
+
