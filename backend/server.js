@@ -212,6 +212,33 @@ app.post('/api/auth/reset-password', checkDbConnection, async (req, res) => {
   }
 });
 
+// Delete Account
+app.post('/api/auth/delete-account', checkDbConnection, async (req, res) => {
+  try {
+    const { gmail } = req.body;
+
+    if (!gmail) {
+      return res.status(400).json({ error: 'Gmail is required.' });
+    }
+
+    const emailKey = gmail.toLowerCase().trim();
+    const result = await User.deleteOne({ gmail: emailKey });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'User account not found.' });
+    }
+
+    console.log(`[Auth] User account deleted: ${emailKey}`);
+    res.json({
+      success: true,
+      message: 'Account successfully deleted from database.',
+    });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({ error: 'Server error during account deletion.' });
+  }
+});
+
 // Start Express Server
 app.listen(PORT, () => {
   console.log(`AURA backend auth server running on port ${PORT}`);

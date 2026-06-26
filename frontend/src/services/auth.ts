@@ -265,4 +265,24 @@ export const authService = {
     });
     return { success: true };
   },
+
+  /**
+   * Delete User Account
+   */
+  async deleteAccount(gmail: string): Promise<boolean> {
+    const isOnline = await checkServerOnline();
+    if (isOnline) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/delete-account`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gmail: gmail.toLowerCase().trim() }),
+        });
+        return res.ok;
+      } catch (err) {
+        console.warn('Delete account server call failed', err);
+      }
+    }
+    return true;
+  },
 };

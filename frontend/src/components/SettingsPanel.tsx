@@ -7,9 +7,10 @@ import { validateApiKey } from '../services/gemini';
 interface SettingsPanelProps {
   settings: Settings;
   setSettings: (s: Settings) => void;
+  onDeleteAccount: () => void;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, setSettings }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, setSettings, onDeleteAccount }) => {
   const [showKey, setShowKey] = React.useState(false);
   const [profileName, setProfileName] = React.useState(settings.userName || '');
   const [profileGmail, setProfileGmail] = React.useState(settings.userGmail || '');
@@ -355,6 +356,36 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, setSetti
             </div>
           </div>
         </div>
+
+        {/* Danger Zone */}
+        <div className="border-t border-red-500/20 pt-6 space-y-4">
+          <h3 className="text-xs font-semibold text-red-500 uppercase tracking-wider flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-500" /> Danger Zone
+          </h3>
+          <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <span className="block text-sm font-semibold text-white">Delete Account</span>
+              <span className="block text-xs text-apple-gray mt-1 max-w-md leading-relaxed">
+                Permanently delete your account profile, uploaded documents, custom highlights, quizzes, and spaced-repetition flashcards.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const confirmed = window.confirm(
+                  "WARNING: Are you absolutely sure you want to delete your account? This will permanently erase your profile and all your document data, flashcards, and quizzes. This action is irreversible!"
+                );
+                if (confirmed) {
+                  onDeleteAccount();
+                }
+              }}
+              className="w-full sm:w-auto py-2.5 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold apple-transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0 animate-pulse hover:animate-none"
+            >
+              Delete Account
+            </button>
+          </div>
+        </div>
+
       </div>
     </div>
   );

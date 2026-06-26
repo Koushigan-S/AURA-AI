@@ -3,6 +3,7 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import type { AuraDocument, Flashcard, QuizQuestion, Settings } from './types';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
+import { authService } from './services/auth';
 import { DocViewer } from './components/DocViewer';
 import { ChatPanel } from './components/ChatPanel';
 import { StudyDeck } from './components/StudyDeck';
@@ -62,6 +63,32 @@ function App() {
       }
     }
   }, [documents, selectedDoc]);
+
+  const handleDeleteAccount = async () => {
+    if (settings.userGmail) {
+      try {
+        await authService.deleteAccount(settings.userGmail);
+      } catch (e) {
+        console.error("Backend account deletion failed:", e);
+      }
+    }
+    
+    // Completely wipe all local storage keys
+    localStorage.removeItem('aura_documents');
+    localStorage.removeItem('aura_flashcards');
+    localStorage.removeItem('aura_questions');
+    localStorage.removeItem('aura_settings');
+    localStorage.removeItem('aura_logged_in');
+    
+    // Reset React states to clean defaults
+    setDocuments([]);
+    setFlashcards([]);
+    setQuestions([]);
+    setSettings(DEFAULT_SETTINGS);
+    setSelectedDoc(null);
+    setIsLoggedIn(false);
+    setActiveView('dashboard');
+  };
 
 
   // Number of reviews pending today
@@ -180,7 +207,7 @@ function App() {
 
           {activeView === 'settings' && (
             <div className="w-full h-full overflow-y-auto p-6 md:p-8 flex flex-col items-center justify-start">
-              <SettingsPanel settings={settings} setSettings={setSettings} />
+              <SettingsPanel settings={settings} setSettings={setSettings} onDeleteAccount={handleDeleteAccount} />
             </div>
           )}
         </div>
