@@ -90,6 +90,67 @@ function getGeminiClient(apiKey: string) {
 }
 
 /**
+ * Tries a list of model names in order until one succeeds.
+ * Handles quota (429) and model-not-found (404) errors automatically.
+ */
+async function generateWithFallback(
+  genAI: GoogleGenerativeAI,
+  models: string[],
+  promptOrConfig: Parameters<ReturnType<GoogleGenerativeAI['getGenerativeModel']>['generateContent']>[0],
+  generationConfig?: object
+): Promise<string> {
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName, ...(generationConfig ? { generationConfig } : {}) });
+      const result = await model.generateContent(promptOrConfig as string);
+      return result.response.text();
+    } catch (err: any) {
+      const msg = err?.message || '';
+      const isQuota = msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED');
+      const isNotFound = msg.includes('404') || msg.includes('not found');
+      if ((isQuota || isNotFound) && models.indexOf(modelName) < models.length - 1) {
+        console.warn(`[AURA] Model ${modelName} failed (${isQuota ? 'quota' : 'not found'}), trying next...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('All Gemini models exhausted.');
+}
+
+/**
+ * Tries chat session with fallback models.
+ */
+async function chatWithFallback(
+  genAI: GoogleGenerativeAI,
+  models: string[],
+  history: { role: string; parts: { text: string }[] }[],
+  systemInstruction: string,
+  message: string
+): Promise<string> {
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const chatSession = model.startChat({ history, systemInstruction });
+      const result = await chatSession.sendMessage(message);
+      return result.response.text();
+    } catch (err: any) {
+      const msg = err?.message || '';
+      const isQuota = msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED');
+      const isNotFound = msg.includes('404') || msg.includes('not found');
+      if ((isQuota || isNotFound) && models.indexOf(modelName) < models.length - 1) {
+        console.warn(`[AURA] Chat model ${modelName} failed (${isQuota ? 'quota' : 'not found'}), trying next...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('All Gemini chat models exhausted.');
+}
+
+const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b'];
+
+/**
  * Detects the document topic and subject context.
  */
 export async function detectTopic(content: string, settings: Settings): Promise<string> {
@@ -110,11 +171,10 @@ export async function detectTopic(content: string, settings: Settings): Promise<
   }
 
   try {
-    const genAI = getGeminiClient(apiKey);
-    const model = genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const genAI = getGeminiClient(apiKey)!;
     const prompt = `Analyze the following academic document text. Detect and return ONLY the subject/topic context name in 3-5 words (e.g., "Introductory Quantum Mechanics", "18th Century European History", "Modernist American Literature").\n\nDocument Text Preview:\n${content.substring(0, 3000)}`;
-    const result = await model.generateContent(prompt);
-    return result.response.text().trim();
+    const text = await generateWithFallback(genAI, FALLBACK_MODELS, prompt);
+    return text.trim();
   } catch (error) {
     console.error('Gemini error detecting topic:', error);
     return 'General Study Guide';
@@ -142,9 +202,7 @@ export async function summarizeContent(
   }
 
   try {
-    const genAI = getGeminiClient(apiKey);
-    const model = genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    
+    const genAI = getGeminiClient(apiKey)!;
     let modeInstruction = '';
     if (settings.topicMode === 'exam') {
       modeInstruction = 'Create concise, highly dense exam study notes focusing on core facts, terminology, date/event details, and structural points.';
@@ -153,7 +211,6 @@ export async function summarizeContent(
     } else {
       modeInstruction = 'Explain deep concepts with simple analogies, step-by-step math or logic breakdowns, and intuitive explanations.';
     }
-
     const prompt = `You are AURA, an expert academic tutor.
 Summarize the academic text below using Markdown headings and bullets.
 Format with clean sections.
@@ -162,9 +219,8 @@ Apply mode constraint: ${modeInstruction}
 Document: ${documentName}
 Content:
 ${content.substring(0, 8000)}`;
-
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+    const text = await generateWithFallback(genAI, FALLBACK_MODELS, prompt);
+    return text;
   } catch (error) {
     console.error('Gemini error summarizing:', error);
     return 'Failed to generate summary. Please check your API key.';
@@ -194,12 +250,7 @@ export async function generateAutoHighlights(
   }
 
   try {
-    const genAI = getGeminiClient(apiKey);
-    const model = genAI!.getGenerativeModel({ 
-      model: 'gemini-2.5-flash',
-      generationConfig: { responseMimeType: 'application/json' }
-    });
-
+    const genAI = getGeminiClient(apiKey)!;
     const prompt = `You are AURA, an academic highlighting assistant. Analyze the text and identify key phrases that should be highlighted based on the study mode: "${settings.topicMode}".
 Categorize each highlight as:
 - 'fact' (color: 'yellow')
@@ -212,9 +263,8 @@ Only highlight exact substrings that appear literally in the text. Highlight bet
 
 Text to highlight:
 ${content.substring(0, 5000)}`;
-
-    const result = await model.generateContent(prompt);
-    const parsed = JSON.parse(result.response.text());
+    const text = await generateWithFallback(genAI, FALLBACK_MODELS, prompt, { responseMimeType: 'application/json' });
+    const parsed = JSON.parse(text);
     return parsed;
   } catch (error) {
     console.error('Gemini error highlighting:', error);
@@ -248,12 +298,7 @@ export async function generateFlashcards(
   }
 
   try {
-    const genAI = getGeminiClient(apiKey);
-    const model = genAI!.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      generationConfig: { responseMimeType: 'application/json' }
-    });
-
+    const genAI = getGeminiClient(apiKey)!;
     const prompt = `You are AURA, an academic helper. Generate a list of 5-8 flashcards to help study this material.
 Each flashcard must contain:
 - "front": A clear, concise question or term prompt.
@@ -263,9 +308,8 @@ Return as a JSON array of flashcards with keys "front" and "back".
 
 Content:
 ${content.substring(0, 6000)}`;
-
-    const result = await model.generateContent(prompt);
-    return JSON.parse(result.response.text());
+    const text = await generateWithFallback(genAI, FALLBACK_MODELS, prompt, { responseMimeType: 'application/json' });
+    return JSON.parse(text);
   } catch (error) {
     console.error('Gemini error generating cards:', error);
     return [];
@@ -339,12 +383,7 @@ export async function generateQuizQuestions(
   }
 
   try {
-    const genAI = getGeminiClient(apiKey);
-    const model = genAI!.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      generationConfig: { responseMimeType: 'application/json' }
-    });
-
+    const genAI = getGeminiClient(apiKey)!;
     let prompt = `You are AURA. Generate a customized mock quiz paper to test the user on the primary document content.`;
 
     if (pyqContent && pyqContent.trim()) {
@@ -372,8 +411,8 @@ If the Previous Year Question Paper highlights certain high-weightage topics tha
 Syllabus Content:
 ${content.substring(0, 6000)}`;
 
-    const result = await model.generateContent(prompt);
-    return JSON.parse(result.response.text());
+    const text = await generateWithFallback(genAI, FALLBACK_MODELS, prompt, { responseMimeType: 'application/json' });
+    return JSON.parse(text);
   } catch (error) {
     console.error('Gemini error generating quiz:', error);
     return [];
@@ -400,12 +439,7 @@ export async function evaluateAnswer(
   }
 
   try {
-    const genAI = getGeminiClient(apiKey);
-    const model = genAI!.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      generationConfig: { responseMimeType: 'application/json' }
-    });
-
+    const genAI = getGeminiClient(apiKey)!;
     const prompt = `You are AURA, an academic grading assistant. Grade the student's answer.
 Question: "${question}"
 Max Marks: ${marks}
@@ -418,9 +452,8 @@ Grade objectively. Provide:
 - "modelAnswer": A polished exemplary answer.
 
 Return exactly a JSON object with keys "score", "feedback", and "modelAnswer".`;
-
-    const result = await model.generateContent(prompt);
-    return JSON.parse(result.response.text());
+    const text = await generateWithFallback(genAI, FALLBACK_MODELS, prompt, { responseMimeType: 'application/json' });
+    return JSON.parse(text);
   } catch (error) {
     console.error('Gemini grading error:', error);
     return {
@@ -457,8 +490,7 @@ To ask questions about your custom files, please enter your Gemini API key in Se
   }
 
   try {
-    const genAI = getGeminiClient(apiKey);
-    const model = genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const genAI = getGeminiClient(apiKey)!;
 
     let systemInstructions = `You are AURA (AI Understanding, Revision & Assistance), a helpful and premium academic companion.
 You study in "${settings.topicMode}" mode. Keep your answers clear, visually structured, and direct.`;
@@ -472,19 +504,23 @@ ${docContext.content.substring(0, 10000)}
 If the answer cannot be found in the document, use your broad academic knowledge but clarify that it is not explicitly mentioned in the text.`;
     }
 
-    const chatSession = model.startChat({
-      history: history.map(h => ({
-        role: h.role === 'user' ? 'user' : 'model',
-        parts: [{ text: h.parts }]
-      })),
-      systemInstruction: systemInstructions
-    });
+    const chatHistory = history.map(h => ({
+      role: h.role === 'user' ? 'user' : 'model',
+      parts: [{ text: h.parts }]
+    }));
 
-    const result = await chatSession.sendMessage(question);
-    return result.response.text();
-  } catch (error) {
+    const response = await chatWithFallback(genAI, FALLBACK_MODELS, chatHistory, systemInstructions, question);
+    return response;
+  } catch (error: any) {
     console.error('Gemini chat error:', error);
-    return 'Sorry, I encountered an issue answering your question. Please verify your internet connection or API key.';
+    const msg = error?.message || '';
+    if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+      return '⚠️ Daily quota reached for your Gemini API key. The free tier allows 20 requests/day for gemini-2.5-flash. Please wait until tomorrow or upgrade your Google AI plan at https://ai.google.dev';
+    }
+    if (msg.includes('API_KEY_INVALID') || msg.includes('401')) {
+      return '❌ Your Gemini API key appears to be invalid. Please go to Settings and re-enter a valid key from https://aistudio.google.com/apikey';
+    }
+    return 'Sorry, I encountered an issue. Please check your internet connection and try again.';
   }
 }
 
@@ -504,9 +540,7 @@ ${newNotes}
   }
 
   try {
-    const genAI = getGeminiClient(apiKey);
-    const model = genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
+    const genAI = getGeminiClient(apiKey)!;
     const prompt = `You are AURA, an academic writing assistant.
 We have an existing study summary:
 ---
@@ -522,9 +556,8 @@ Under an "Auto-Enrich" header or embedded context, provide:
 2. An illustrative analogy or practical real-world example to make the concept easier to grasp.
 
 Format using clean Markdown.`;
-
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+    const text = await generateWithFallback(genAI, FALLBACK_MODELS, prompt);
+    return text;
   } catch (error) {
     console.error('Gemini notes enrichment error:', error);
     return `${currentSummary}\n\n### Merged Note\n${newNotes}`;
