@@ -17,7 +17,7 @@ export interface ResetResponse {
   error?: string;
 }
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 /**
  * Check if the backend Express auth server is online and database is connected.
