@@ -116,6 +116,8 @@ export const authService = {
           userName: data.name,
           userGmail: data.gmail,
           userPassword: password,
+          // Restore the stored API key from the server if present
+          ...(data.geminiApiKey ? { geminiApiKey: data.geminiApiKey } : {}),
         });
 
         return { name: data.name, gmail: data.gmail };
@@ -284,5 +286,29 @@ export const authService = {
       }
     }
     return true;
+  },
+  /**
+   * Save Gemini API Key to backend
+   */
+  async saveApiKey(gmail: string, geminiApiKey: string): Promise<{ success: boolean; error?: string }> {
+    const isOnline = await checkServerOnline();
+    if (isOnline) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/save-api-key`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gmail: gmail.toLowerCase().trim(), geminiApiKey }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          return { success: false, error: data.error || 'Failed to save API key.' };
+        }
+        return { success: true };
+      } catch (err) {
+        console.warn('Save API key server call failed, key saved locally only.', err);
+      }
+    }
+    // Offline: key is already saved in localStorage via settings, so treat as success
+    return { success: true };
   },
 };

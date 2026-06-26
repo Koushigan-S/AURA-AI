@@ -38,7 +38,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, setSetti
     try {
       const isValid = await validateApiKey(apiKey.trim());
       if (isValid) {
+        // Save to localStorage via settings
         updateSetting('geminiApiKey', apiKey.trim());
+        // Also persist to backend so the key is tied to the user's account
+        if (settings.userGmail) {
+          await authService.saveApiKey(settings.userGmail, apiKey.trim());
+        }
         setApiKeySuccess('Gemini API key saved and activated successfully!');
       } else {
         setApiKeyError('Invalid Gemini API Key or network error. Connection failed.');

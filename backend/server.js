@@ -30,6 +30,7 @@ const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   gmail: { type: String, required: true, unique: true },
   password: { type: String, required: true },
+  geminiApiKey: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -104,6 +105,7 @@ app.post('/api/auth/signin', checkDbConnection, async (req, res) => {
     res.json({
       name: user.name,
       gmail: user.gmail,
+      geminiApiKey: user.geminiApiKey || '',
     });
   } catch (error) {
     console.error('Signin error:', error);
@@ -209,6 +211,35 @@ app.post('/api/auth/reset-password', checkDbConnection, async (req, res) => {
   } catch (error) {
     console.error('Password reset error:', error);
     res.status(500).json({ error: 'Server error resetting password.' });
+  }
+});
+
+// Save Gemini API Key
+app.post('/api/auth/save-api-key', checkDbConnection, async (req, res) => {
+  try {
+    const { gmail, geminiApiKey } = req.body;
+
+    if (!gmail) {
+      return res.status(400).json({ error: 'Gmail is required.' });
+    }
+    if (!geminiApiKey || !geminiApiKey.trim()) {
+      return res.status(400).json({ error: 'API key cannot be empty.' });
+    }
+
+    const emailKey = gmail.toLowerCase().trim();
+    const user = await User.findOne({ gmail: emailKey });
+    if (!user) {
+      return res.status(404).json({ error: 'User account not found.' });
+    }
+
+    user.geminiApiKey = geminiApiKey.trim();
+    await user.save();
+
+    console.log(`[Settings] Gemini API key saved for: ${emailKey}`);
+    res.json({ success: true, message: 'API key saved successfully.' });
+  } catch (error) {
+    console.error('Save API key error:', error);
+    res.status(500).json({ error: 'Server error saving API key.' });
   }
 });
 
