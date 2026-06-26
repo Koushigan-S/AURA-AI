@@ -41,7 +41,7 @@ function App() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoadingApp(false);
-    }, 10000);
+    }, 5000);
     return () => clearTimeout(timer);
   }, []);
   const [documents, setDocuments] = useLocalStorage<AuraDocument[]>('aura_documents', []);
