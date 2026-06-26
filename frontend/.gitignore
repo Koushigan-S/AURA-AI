@@ -26,3 +26,4 @@ dist-ssr
 # Environment variables - never commit secrets
 .env
 test_db.js
+.vercel
