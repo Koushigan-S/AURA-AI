@@ -15,11 +15,11 @@ export const SkillStatus: React.FC<SkillStatusProps> = ({
   questions,
 }) => {
   const getSkillMetrics = () => {
-    let recall = 50;
-    let accuracy = 50;
-    let solving = 50;
-    let retention = 50;
-    let focus = 50;
+    let recall = 0;
+    let accuracy = 0;
+    let solving = 0;
+    let retention = 0;
+    let focus = 0;
 
     const mcqs = questions.filter(q => q.type === 'mcq' && q.evaluation !== undefined);
     const shorts = questions.filter(q => q.type === 'short' && q.evaluation !== undefined);
@@ -56,11 +56,11 @@ export const SkillStatus: React.FC<SkillStatusProps> = ({
     const hlScore = Math.min(60, totalHighlights * 8);
     focus = Math.round(docScore + hlScore);
     
-    recall = Math.max(15, Math.min(100, recall));
-    accuracy = Math.max(15, Math.min(100, accuracy));
-    solving = Math.max(15, Math.min(100, solving));
-    retention = Math.max(15, Math.min(100, retention));
-    focus = Math.max(15, Math.min(100, focus));
+    recall = Math.max(0, Math.min(100, recall));
+    accuracy = Math.max(0, Math.min(100, accuracy));
+    solving = Math.max(0, Math.min(100, solving));
+    retention = Math.max(0, Math.min(100, retention));
+    focus = Math.max(0, Math.min(100, focus));
 
     return { recall, accuracy, solving, retention, focus };
   };

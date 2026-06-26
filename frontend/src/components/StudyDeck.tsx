@@ -69,6 +69,23 @@ export const StudyDeck: React.FC<StudyDeckProps> = ({
     }
   };
 
+  const handlePrev = () => {
+    setIsFlipped(false);
+    setActiveCardIndex(prev => Math.max(0, prev - 1));
+  };
+
+  const handleNext = () => {
+    setIsFlipped(false);
+    setActiveCardIndex(prev => Math.min(dueCards.length - 1, prev + 1));
+  };
+
+  // Keep activeCardIndex in bounds of dueCards list
+  useEffect(() => {
+    if (dueCards.length > 0 && activeCardIndex >= dueCards.length) {
+      setActiveCardIndex(Math.max(0, dueCards.length - 1));
+    }
+  }, [dueCards.length, activeCardIndex]);
+
   const handleSM2Review = (rating: 'again' | 'hard' | 'good' | 'easy') => {
     if (!activeCard) return;
 
@@ -112,40 +129,141 @@ export const StudyDeck: React.FC<StudyDeckProps> = ({
     setFlashcards(updated);
     setIsFlipped(false);
     setReviewedTodayCount((prev) => prev + 1);
-
-    // Slide to next card
-    if (activeCardIndex < dueCards.length - 1) {
-      // stay at same index because item will be removed from due list once synced
-    }
   };
 
-  const exportDeck = (format: 'json' | 'csv') => {
+  const exportDeckAsPdf = () => {
     const activeDocCards = flashcards.filter(c => selectedDocId === 'all' || c.documentId === selectedDocId);
-    if (format === 'json') {
-      const dataStr = JSON.stringify(activeDocCards, null, 2);
-      const blob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = window.document.createElement('a');
-      a.href = url;
-      a.download = `aura_flashcards_${selectedDocId}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } else {
-      const csvRows = ['front,back'];
-      activeDocCards.forEach(c => {
-        // Escape quotes
-        const f = c.front.replace(/"/g, '""');
-        const b = c.back.replace(/"/g, '""');
-        csvRows.push(`"${f}","${b}"`);
-      });
-      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = window.document.createElement('a');
-      a.href = url;
-      a.download = `aura_flashcards_${selectedDocId}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+    const docName = selectedDocId === 'all' ? 'All Documents' : (documents.find(d => d.id === selectedDocId)?.name || 'Document');
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Please allow popups to export the PDF.');
+      return;
     }
+
+    const cardsHtml = activeDocCards.map((card, idx) => `
+      <div class="card-item">
+        <div class="card-num">Card ${idx + 1}</div>
+        <div class="card-grid">
+          <div class="card-side front-side">
+            <div class="label">QUESTION</div>
+            <div class="content">${card.front}</div>
+          </div>
+          <div class="card-side back-side">
+            <div class="label">ANSWER / EXPLANATION</div>
+            <div class="content">${card.back}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>AURA Flashcard Deck - ${docName}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1d1d1f;
+      background: #ffffff;
+      line-height: 1.5;
+      padding: 40px;
+      margin: 0;
+    }
+    header {
+      border-bottom: 2px solid #f5f5f7;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      margin: 0 0 8px 0;
+      color: #000;
+    }
+    .meta {
+      font-size: 13px;
+      color: #86868b;
+    }
+    .card-item {
+      page-break-inside: avoid;
+      border: 1px solid #e5e5e7;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      background: #fbfbfd;
+      overflow: hidden;
+    }
+    .card-num {
+      background: #f5f5f7;
+      padding: 10px 20px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #86868b;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      border-bottom: 1px solid #e5e5e7;
+    }
+    .card-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+    .card-side {
+      padding: 20px;
+    }
+    .front-side {
+      border-right: 1px solid #e5e5e7;
+    }
+    .label {
+      font-size: 9px;
+      font-weight: 700;
+      color: #86868b;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .content {
+      font-size: 14px;
+      color: #1d1d1f;
+      font-weight: 500;
+    }
+    @media print {
+      body {
+        padding: 20px;
+      }
+      .card-item {
+        border-color: #d2d2d7;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AURA Flashcards Revision Deck</h1>
+    <div class="meta font-semibold">
+      Source Document: ${docName} &bull; Total Cards: ${activeDocCards.length}
+    </div>
+  </header>
+  
+  <main>
+    ${activeDocCards.length > 0 ? cardsHtml : '<p style="color: #86868b; text-align: center; margin-top: 40px;">No flashcards found in this folder.</p>'}
+  </main>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+        window.close();
+      }, 300);
+    };
+  </script>
+</body>
+</html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
 
   const handleManualAdd = (e: React.FormEvent) => {
@@ -212,10 +330,10 @@ export const StudyDeck: React.FC<StudyDeckProps> = ({
           )}
 
           <button
-            onClick={() => exportDeck('csv')}
+            onClick={exportDeckAsPdf}
             className="py-2 px-3 bg-white/5 border border-white/5 rounded-lg text-xs font-semibold text-white flex items-center gap-1.5 hover:bg-white/10"
           >
-            <Download className="w-3.5 h-3.5" /> Export .csv
+            <Download className="w-3.5 h-3.5" /> Export PDF
           </button>
         </div>
       </div>
@@ -308,7 +426,9 @@ export const StudyDeck: React.FC<StudyDeckProps> = ({
                   className="w-full h-full duration-500 transform-style-3d relative"
                 >
                   {/* Front Side */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-apple-dark to-black border border-white/10 rounded-2xl p-8 flex flex-col justify-between backface-hidden">
+                  <div className={`absolute inset-0 bg-gradient-to-br from-apple-dark to-black border border-white/10 rounded-2xl p-8 flex flex-col justify-between backface-hidden \${
+                    isFlipped ? 'z-0 pointer-events-none' : 'z-10'
+                  }`}>
                     <span className="text-[10px] text-apple-gray uppercase tracking-wider font-semibold">Question</span>
                     <div className="text-center my-auto px-4">
                       <p className="text-lg font-medium text-white leading-relaxed">{activeCard.front}</p>
@@ -319,7 +439,9 @@ export const StudyDeck: React.FC<StudyDeckProps> = ({
                   {/* Back Side */}
                   <div
                     style={{ transform: 'rotateY(180deg)' }}
-                    className="absolute inset-0 bg-gradient-to-br from-purple-950/20 to-black border border-purple-500/20 rounded-2xl p-8 flex flex-col justify-between backface-hidden"
+                    className={`absolute inset-0 bg-gradient-to-br from-purple-950/20 to-black border border-purple-500/20 rounded-2xl p-8 flex flex-col justify-between backface-hidden \${
+                      isFlipped ? 'z-10' : 'z-0 pointer-events-none'
+                    }`}
                   >
                     <span className="text-[10px] text-purple-400 uppercase tracking-wider font-semibold">Answer / Explanation</span>
                     <div className="text-center my-auto px-4">
@@ -328,6 +450,35 @@ export const StudyDeck: React.FC<StudyDeckProps> = ({
                     <span className="text-[10px] text-apple-gray font-medium text-center">Click to flip front</span>
                   </div>
                 </motion.div>
+              </div>
+
+              {/* Navigation Controls */}
+              <div className="flex justify-between items-center bg-white/[0.02] border border-white/5 rounded-xl p-3 select-none">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePrev();
+                  }}
+                  disabled={activeCardIndex === 0}
+                  className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none rounded-lg text-xs font-semibold text-white apple-transition cursor-pointer"
+                >
+                  &larr; Previous
+                </button>
+                <span className="text-xs text-apple-gray font-medium">
+                  Card {activeCardIndex + 1} of {dueCards.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleNext();
+                  }}
+                  disabled={activeCardIndex === dueCards.length - 1}
+                  className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none rounded-lg text-xs font-semibold text-white apple-transition cursor-pointer"
+                >
+                  Next &rarr;
+                </button>
               </div>
 
               {/* SM-2 Feedback Controllers */}

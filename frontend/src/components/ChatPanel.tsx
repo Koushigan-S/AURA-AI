@@ -55,7 +55,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ document, settings, onClos
     setLoading(true);
 
     try {
-      const chatHistory = messages.map(m => ({ role: m.role, parts: m.parts }));
+      const chatHistory = messages.slice(1).map(m => ({ role: m.role, parts: m.parts }));
       const response = await answerChatQuestion(text, chatHistory, document, settings);
       setMessages((prev) => [...prev, { role: 'model', parts: response }]);
     } catch (error) {

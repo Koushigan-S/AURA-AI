@@ -53,6 +53,17 @@ function App() {
     return documents.length > 0 ? documents[0] : null;
   });
 
+  // Keep selectedDoc synchronized with documents list updates
+  useEffect(() => {
+    if (selectedDoc) {
+      const current = documents.find(d => d.id === selectedDoc.id);
+      if (current && JSON.stringify(current) !== JSON.stringify(selectedDoc)) {
+        setSelectedDoc(current);
+      }
+    }
+  }, [documents, selectedDoc]);
+
+
   // Number of reviews pending today
   const pendingReviewsCount = flashcards.filter(
     (card) => new Date(card.dueDate) <= new Date()

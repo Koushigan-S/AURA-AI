@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { AuraDocument, AuraHighlight, Settings } from '../types';
-import { generateAutoHighlights } from '../services/gemini';
+import { generateAutoHighlights, summarizeContent } from '../services/gemini';
 import { BookOpen, Highlighter, Volume2, Plus, Download, Sparkles, Check, Bookmark, Eye, EyeOff, PanelLeft, PanelRight, MessageSquare } from 'lucide-react';
 
 interface DocViewerProps {
@@ -58,6 +58,43 @@ export const DocViewer: React.FC<DocViewerProps> = ({
       setActiveSectionId(document.sections[0].id);
     }
   }, [document]);
+
+  // Load section summary on section change if it doesn't exist
+  useEffect(() => {
+    if (!document || !activeSectionId) return;
+    const currentSection = document.sections.find((s) => s.id === activeSectionId);
+    if (!currentSection || currentSection.summary) return;
+
+    const fetchSectionSummary = async () => {
+      try {
+        const generated = await summarizeContent(
+          `${document.name} - ${currentSection.title}`,
+          currentSection.content,
+          settings
+        );
+
+        const updatedDocs = documents.map((doc) => {
+          if (doc.id === document.id) {
+            const updatedSections = doc.sections.map((s) => {
+              if (s.id === currentSection.id) {
+                return { ...s, summary: generated };
+              }
+              return s;
+            });
+            return { ...doc, sections: updatedSections };
+          }
+          return doc;
+        });
+
+        setDocuments(updatedDocs);
+      } catch (err) {
+        console.error('Error generating section summary:', err);
+      }
+    };
+
+    fetchSectionSummary();
+  }, [activeSectionId, document?.id, documents, setDocuments, settings]);
+
 
   if (!document) {
     return (
@@ -142,17 +179,18 @@ export const DocViewer: React.FC<DocViewerProps> = ({
       const text = selection.toString();
       const rect = selection.getRangeAt(0).getBoundingClientRect();
       
-      // Calculate coordinates relative to window
+      // Calculate coordinates relative to viewport (since popup is fixed)
       setSelectionRange({
         text,
-        x: rect.left + window.scrollX,
-        y: rect.top + window.scrollY - 50
+        x: rect.left + (rect.width / 2) - 140, // Centered horizontally
+        y: rect.top - 55 // Placed 55px above selection
       });
       setShowNoteInput(false);
     } else {
       setSelectionRange(null);
     }
   };
+
 
   const addHighlight = (
     text: string,
@@ -297,41 +335,244 @@ export const DocViewer: React.FC<DocViewerProps> = ({
   };
 
   const exportHtmlStudySheet = () => {
-    const highlightsHtml = document.highlights.map(h => 
-      `<li style="margin-bottom: 8px;">[${h.type.toUpperCase()}] "${h.text}" ${h.note ? `<em>(Note: ${h.note})</em>` : ''}</li>`
-    ).join('');
+    const parseMarkdownToHtml = (md: string) => {
+      if (!md) return '';
+      // Escape HTML entities to prevent rendering issues with math tags or random < characters
+      let escaped = md
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      // Format headers
+      escaped = escaped
+        .replace(/^### (.*?)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.*?)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.*?)$/gm, '<h1>$1</h1>');
+
+      // Format bold and italic
+      escaped = escaped
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+      // Format list items
+      escaped = escaped
+        .replace(/^\s*[-*]\s+(.*?)$/gm, '<li>$1</li>');
+
+      // Group contiguous <li> elements inside <ul>
+      const lines = escaped.split('\n');
+      let inList = false;
+      const formattedLines = [];
+
+      for (let line of lines) {
+        const isLi = line.trim().startsWith('<li>');
+        if (isLi && !inList) {
+          inList = true;
+          formattedLines.push('<ul>');
+        } else if (!isLi && inList) {
+          inList = false;
+          formattedLines.push('</ul>');
+        }
+        formattedLines.push(line);
+      }
+      if (inList) {
+        formattedLines.push('</ul>');
+      }
+
+      // Join and do paragraph formatting for double line breaks
+      return formattedLines
+        .join('\n')
+        .split(/\n\s*\n/)
+        .map(p => {
+          const trimmed = p.trim();
+          if (!trimmed) return '';
+          if (trimmed.startsWith('<h') || trimmed.startsWith('<ul') || trimmed.startsWith('<ul>') || trimmed.startsWith('<li')) {
+            return trimmed;
+          }
+          return `<p>${trimmed.replace(/\n/g, '<br>')}</p>`;
+        })
+        .join('\n');
+    };
 
     const htmlContent = `
 <!DOCTYPE html>
 <html>
 <head>
-  <title>AURA Revision - ${document.name}</title>
+  <meta charset="utf-8">
+  <title>AURA Study Sheet - ${document.name}</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #fafafa; color: #111; padding: 40px; max-width: 800px; margin: auto; }
-    h1 { border-bottom: 2px solid #0071e3; padding-bottom: 10px; font-weight: 500; }
-    h2 { margin-top: 30px; font-weight: 500; }
-    .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; border: 1px solid #eaeaea; }
-    .summary { font-style: italic; line-height: 1.6; }
-    .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; background: #eaeaea; }
+    :root {
+      --primary: #0071e3;
+      --bg: #0d0d0d;
+      --card-bg: #1a1a1a;
+      --text: #f5f5f7;
+      --text-gray: #86868b;
+      --border: rgba(255,255,255,0.08);
+      
+      --yellow: rgba(250, 204, 21, 0.15);
+      --yellow-border: rgba(250, 204, 21, 0.4);
+      --yellow-text: #fde047;
+      
+      --blue: rgba(59, 130, 246, 0.15);
+      --blue-border: rgba(59, 130, 246, 0.4);
+      --blue-text: #93c5fd;
+      
+      --green: rgba(34, 197, 94, 0.15);
+      --green-border: rgba(34, 197, 94, 0.4);
+      --green-text: #86efac;
+      
+      --purple: rgba(168, 85, 247, 0.15);
+      --purple-border: rgba(168, 85, 247, 0.4);
+      --purple-text: #d8b4fe;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 40px 20px;
+      max-width: 900px;
+      margin: auto;
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 24px;
+      margin-bottom: 32px;
+    }
+    h1 {
+      font-size: 30px;
+      font-weight: 700;
+      margin: 0 0 8px 0;
+      letter-spacing: -0.5px;
+      color: #fff;
+    }
+    .meta {
+      font-size: 13px;
+      color: var(--text-gray);
+      display: flex;
+      gap: 16px;
+    }
+    .badge {
+      background: rgba(255,255,255,0.06);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 500;
+      color: #fff;
+    }
+    h2 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-top: 40px;
+      margin-bottom: 16px;
+      border-left: 3px solid var(--primary);
+      padding-left: 12px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    }
+    .summary-text {
+      font-size: 14px;
+      color: rgba(255,255,255,0.9);
+    }
+    .summary-text p, .section-body p {
+      margin: 0 0 12px 0;
+    }
+    .summary-text h3, .section-body h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 16px 0 8px 0;
+      color: #fff;
+    }
+    .summary-text ul, .section-body ul {
+      margin: 0 0 12px 0;
+      padding-left: 20px;
+    }
+    .summary-text li, .section-body li {
+      margin-bottom: 4px;
+    }
+    ul.highlights-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    ul.highlights-list li {
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .hl-fact {
+      background: var(--yellow);
+      border-color: var(--yellow-border) !important;
+      color: var(--yellow-text);
+    }
+    .hl-definition {
+      background: var(--blue);
+      border-color: var(--blue-border) !important;
+      color: var(--blue-text);
+    }
+    .hl-formula {
+      background: var(--green);
+      border-color: var(--green-border) !important;
+      color: var(--green-text);
+    }
+    .hl-insight {
+      background: var(--purple);
+      border-color: var(--purple-border) !important;
+      color: var(--purple-text);
+    }
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 12px 0;
+      color: #fff;
+    }
+    .section-body {
+      font-size: 13.5px;
+      color: rgba(255,255,255,0.8);
+    }
   </style>
 </head>
 <body>
-  <h1>${document.name}</h1>
-  <p><strong>Topic Mode:</strong> ${settings.topicMode.toUpperCase()} | <strong>Context:</strong> ${document.topicContext}</p>
+  <header>
+    <h1>AURA Study Sheet: ${document.name}</h1>
+    <div class="meta">
+      <span>Topic Mode: <span class="badge">${settings.topicMode.toUpperCase()}</span></span>
+      <span>Topic Context: <span class="badge">${document.topicContext}</span></span>
+    </div>
+  </header>
   
   <h2>Document Executive Summary</h2>
-  <div class="card summary">${document.summary.replace(/\n/g, '<br>')}</div>
+  <div class="card">
+    <div class="summary-text">${parseMarkdownToHtml(document.summary)}</div>
+  </div>
 
   <h2>Annotated Study Highlights</h2>
   <div class="card">
-    <ul>${highlightsHtml || '<li>No highlights added yet.</li>'}</ul>
+    <ul class="highlights-list">
+      ${document.highlights.length > 0 ? document.highlights.map(h => {
+        let typeClass = 'hl-fact';
+        if (h.color === 'blue') typeClass = 'hl-definition';
+        if (h.color === 'green') typeClass = 'hl-formula';
+        if (h.color === 'purple') typeClass = 'hl-insight';
+        return `<li class="${typeClass}">
+          <strong>[${h.type.toUpperCase()}]</strong> "${h.text}"
+          ${h.note ? `<div style="margin-top: 6px; font-style: italic; opacity: 0.8;">Note: ${parseMarkdownToHtml(h.note)}</div>` : ''}
+        </li>`;
+      }).join('') : '<li style="color: var(--text-gray)">No highlights added yet.</li>'}
+    </ul>
   </div>
 
   <h2>Revision Study Sections</h2>
   ${document.sections.map(s => `
     <div class="card">
-      <h3>${s.title}</h3>
-      <p>${s.content}</p>
+      <div class="section-title">${s.title}</div>
+      <div class="section-body">${parseMarkdownToHtml(s.content)}</div>
     </div>
   `).join('')}
 </body>
@@ -346,6 +587,7 @@ export const DocViewer: React.FC<DocViewerProps> = ({
     a.click();
     URL.revokeObjectURL(url);
   };
+
 
   return (
     <div className="flex-1 flex overflow-hidden h-full apple-transition">
@@ -467,9 +709,12 @@ export const DocViewer: React.FC<DocViewerProps> = ({
           {selectionRange && (
             <div
               style={{ top: `${selectionRange.y}px`, left: `${selectionRange.x}px` }}
-              className="absolute z-50 bg-apple-dark border border-white/10 rounded-xl p-2.5 shadow-2xl flex flex-col gap-2 apple-glass select-none min-w-[280px]"
+              onMouseUp={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="fixed z-50 bg-apple-dark border border-white/10 rounded-xl p-2.5 shadow-2xl flex flex-col gap-2 apple-glass select-none min-w-[280px]"
             >
               {!showNoteInput ? (
+
                 <>
                   <div className="flex justify-between gap-1">
                     <button
