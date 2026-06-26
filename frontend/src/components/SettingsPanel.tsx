@@ -17,6 +17,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, setSetti
   const [profileError, setProfileError] = React.useState('');
   const [profileSuccess, setProfileSuccess] = React.useState('');
   const [profileLoading, setProfileLoading] = React.useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
 
   const [apiKey, setApiKey] = React.useState(settings.geminiApiKey || '');
   const [apiKeyError, setApiKeyError] = React.useState('');
@@ -146,13 +147,43 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, setSetti
               />
             </div>
           </div>
-          <div className="flex justify-end pt-2">
+          <div className="flex justify-between items-center pt-2">
+            {/* Delete Account — inline beside Save Profile */}
+            {showDeleteConfirm ? (
+              <div className="flex items-center gap-2 animate-fade-in">
+                <span className="text-xs text-red-300 font-medium">Are you sure? This is irreversible.</span>
+                <button
+                  type="button"
+                  onClick={() => { setShowDeleteConfirm(false); onDeleteAccount(); }}
+                  className="py-1.5 px-3 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold apple-transition shadow-sm"
+                >
+                  Yes, Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="py-1.5 px-3 bg-white/10 hover:bg-white/20 text-white/80 rounded-lg text-xs font-semibold apple-transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="py-2 px-4 bg-red-600/15 hover:bg-red-600/30 border border-red-500/30 hover:border-red-500/60 text-red-400 hover:text-red-300 rounded-lg text-xs font-semibold apple-transition flex items-center gap-1.5 shadow-sm"
+              >
+                <AlertCircle className="w-3.5 h-3.5" />
+                Delete Account
+              </button>
+            )}
+
             <button
               type="submit"
               disabled={profileLoading}
               className="py-2 px-5 bg-apple-blue hover:bg-apple-blue/90 disabled:bg-apple-blue/50 text-white rounded-lg text-xs font-semibold apple-transition flex items-center gap-2 shadow-sm"
             >
-              {profileLoading ? 'Saving...' : 'Save Profile'}
+              {profileLoading ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>
@@ -357,34 +388,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, setSetti
           </div>
         </div>
 
-        {/* Danger Zone */}
-        <div className="border-t border-red-500/20 pt-6 space-y-4">
-          <h3 className="text-xs font-semibold text-red-500 uppercase tracking-wider flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-red-500" /> Danger Zone
-          </h3>
-          <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <span className="block text-sm font-semibold text-white">Delete Account</span>
-              <span className="block text-xs text-apple-gray mt-1 max-w-md leading-relaxed">
-                Permanently delete your account profile, uploaded documents, custom highlights, quizzes, and spaced-repetition flashcards.
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const confirmed = window.confirm(
-                  "WARNING: Are you absolutely sure you want to delete your account? This will permanently erase your profile and all your document data, flashcards, and quizzes. This action is irreversible!"
-                );
-                if (confirmed) {
-                  onDeleteAccount();
-                }
-              }}
-              className="w-full sm:w-auto py-2.5 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold apple-transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0 animate-pulse hover:animate-none"
-            >
-              Delete Account
-            </button>
-          </div>
-        </div>
+
 
       </div>
     </div>
