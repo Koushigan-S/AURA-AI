@@ -20,7 +20,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, setSetti
   const [apiKey, setApiKey] = React.useState(settings.geminiApiKey || '');
   const [apiKeyError, setApiKeyError] = React.useState('');
   const [apiKeySuccess, setApiKeySuccess] = React.useState('');
-  const [keyTesting, setKeyTesting] = React.useState(false);
   const [keySaving, setKeySaving] = React.useState(false);
 
   const handleSaveApiKey = async (e: React.FormEvent) => {
@@ -35,36 +34,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, setSetti
 
     setKeySaving(true);
     try {
-      updateSetting('geminiApiKey', apiKey.trim());
-      setApiKeySuccess('Gemini API key saved successfully!');
-    } catch (err) {
-      setApiKeyError('Failed to save API key.');
-    } finally {
-      setKeySaving(false);
-    }
-  };
-
-  const handleTestConnection = async () => {
-    setApiKeyError('');
-    setApiKeySuccess('');
-
-    if (!apiKey.trim()) {
-      setApiKeyError('Please enter an API Key to test.');
-      return;
-    }
-
-    setKeyTesting(true);
-    try {
       const isValid = await validateApiKey(apiKey.trim());
       if (isValid) {
-        setApiKeySuccess('Connection successful! Gemini API Key is valid and active.');
+        updateSetting('geminiApiKey', apiKey.trim());
+        setApiKeySuccess('Gemini API key saved and activated successfully!');
       } else {
-        setApiKeyError('Invalid API Key or network error. Please check your key.');
+        setApiKeyError('Invalid Gemini API Key or network error. Connection failed.');
       }
     } catch (err) {
       setApiKeyError('An error occurred while validating the API key.');
     } finally {
-      setKeyTesting(false);
+      setKeySaving(false);
     }
   };
 
@@ -223,22 +203,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, setSetti
           <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
-              onClick={handleTestConnection}
-              disabled={keyTesting || keySaving}
-              className="py-2 px-5 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 text-white rounded-lg text-xs font-semibold apple-transition flex items-center gap-2"
-            >
-              {keyTesting ? 'Testing...' : 'Test Connection'}
-            </button>
-            <button
-              type="button"
               onClick={handleSaveApiKey}
-              disabled={keyTesting || keySaving}
-              className="py-2 px-5 bg-apple-blue hover:bg-apple-blue/90 disabled:bg-apple-blue/50 text-white rounded-lg text-xs font-semibold apple-transition flex items-center gap-2 shadow-sm"
+              disabled={keySaving || apiKey.trim() === '' || apiKey.trim() === settings.geminiApiKey}
+              className="py-2 px-5 bg-apple-blue hover:bg-apple-blue/90 disabled:bg-white/5 disabled:text-white/35 disabled:border-white/5 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold apple-transition flex items-center gap-2 shadow-sm"
             >
-              {keySaving ? 'Saving...' : 'Save API Key'}
+              {keySaving ? 'Verifying & Saving...' : apiKey.trim() === settings.geminiApiKey && settings.geminiApiKey !== '' ? 'API Key Saved & Active' : 'Save API Key'}
             </button>
           </div>
         </div>
+
 
 
         {/* Study Mode */}
