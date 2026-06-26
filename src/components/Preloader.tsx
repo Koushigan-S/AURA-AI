@@ -1,7 +1,23 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 
 export const Preloader: React.FC = () => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    // Increment from 0 to 100 over ~5 seconds (50ms * 100 steps = 5000ms)
+    const interval = setInterval(() => {
+      setCount((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          return 100;
+        }
+        return prev + 1;
+      });
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <motion.div
       initial={{ opacity: 1 }}
@@ -63,18 +79,29 @@ export const Preloader: React.FC = () => {
         </motion.p>
       </div>
 
-      {/* Modern thin loading bar indicator */}
-      <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 w-48 h-[1px] bg-white/5 rounded-full overflow-hidden">
-        <motion.div
-          initial={{ left: '-100%' }}
-          animate={{ left: '100%' }}
-          transition={{
-            repeat: Infinity,
-            duration: 1.8,
-            ease: "easeInOut"
+      {/* Counter 0–100 */}
+      <div className="absolute bottom-14 flex flex-col items-center gap-2">
+        <motion.span
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3, duration: 0.6 }}
+          className="text-4xl font-bold tabular-nums font-sans"
+          style={{
+            background: 'linear-gradient(90deg, #0071e3, #a855f7)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
           }}
-          className="absolute top-0 bottom-0 w-24 bg-gradient-to-r from-transparent via-apple-blue/60 to-transparent"
-        />
+        >
+          {count}
+        </motion.span>
+        <motion.span
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5, duration: 0.6 }}
+          className="text-[10px] text-white/20 tracking-widest uppercase font-sans"
+        >
+          Loading
+        </motion.span>
       </div>
     </motion.div>
   );
